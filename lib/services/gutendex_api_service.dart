@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../constants/api_constants.dart';
 
@@ -10,8 +11,43 @@ class GutendexApiService {
 
   GutendexApiService({http.Client? client}) : _client = client ?? http.Client();
 
+  /// Helper method untuk retry logic
+  Future<T> _retryWithDelay<T>(Future<T> Function() operation, {String operationName = 'Operation'}) async {
+    int lastErrorStatusCode = 0;
+    
+    for (int attempt = 0; attempt < ApiConstants.maxRetries; attempt++) {
+      try {
+        print('📡 $operationName (attempt ${attempt + 1}/${ApiConstants.maxRetries})');
+        return await operation();
+      } on TimeoutException catch (e) {
+        print('⏰ Timeout on attempt ${attempt + 1}: $e');
+        if (attempt < ApiConstants.maxRetries - 1) {
+          print('⏳ Retrying in ${ApiConstants.retryDelay} seconds...');
+          await Future.delayed(Duration(seconds: ApiConstants.retryDelay));
+        }
+      } on http.ClientException catch (e) {
+        print('🌐 ClientException on attempt ${attempt + 1}: $e');
+        if (attempt < ApiConstants.maxRetries - 1) {
+          print('⏳ Retrying in ${ApiConstants.retryDelay} seconds...');
+          await Future.delayed(Duration(seconds: ApiConstants.retryDelay));
+        }
+      } catch (e) {
+        if (e is http.Response) {
+          lastErrorStatusCode = e.statusCode;
+        }
+        print('❌ Error on attempt ${attempt + 1}: $e');
+        if (attempt < ApiConstants.maxRetries - 1) {
+          print('⏳ Retrying in ${ApiConstants.retryDelay} seconds...');
+          await Future.delayed(Duration(seconds: ApiConstants.retryDelay));
+        }
+      }
+    }
+    
+    throw Exception('$operationName failed after ${ApiConstants.maxRetries} attempts');
+  }
+
   /// Search books dengan query
-  /// 
+  ///
   /// Parameters:
   /// - search: Kata kunci pencarian (judul/penulis)
   /// - languages: Filter bahasa (default: 'en')
@@ -27,19 +63,19 @@ class GutendexApiService {
   }) async {
     try {
       final queryParameters = <String, String>{};
-      
+
       if (search != null && search.isNotEmpty) {
         queryParameters['search'] = search;
       }
-      
+
       if (languages != null) {
         queryParameters['languages'] = languages;
       }
-      
+
       if (copyright != null) {
         queryParameters['copyright'] = copyright;
       }
-      
+
       if (topic != null && topic.isNotEmpty) {
         queryParameters['topic'] = topic;
       }
@@ -48,19 +84,21 @@ class GutendexApiService {
           .replace(queryParameters: queryParameters);
 
       print('📚 Gutendex Search: $uri');
-      
-      final response = await _client.get(uri).timeout(
-        Duration(seconds: ApiConstants.connectTimeout),
-      );
 
-      print('📖 Response status: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        print('❌ Error: ${response.statusCode} - ${response.body}');
-        throw Exception('API error: ${response.statusCode}');
-      }
+      return await _retryWithDelay(() async {
+        final response = await _client.get(uri).timeout(
+          Duration(seconds: ApiConstants.connectTimeout),
+        );
+
+        print('📖 Response status: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          return json.decode(response.body);
+        } else {
+          print('❌ Error: ${response.statusCode} - ${response.body}');
+          throw Exception('API error: ${response.statusCode}');
+        }
+      }, operationName: 'Gutendex Search');
     } catch (e) {
       print('❌ Gutendex search error: $e');
       rethrow;
@@ -73,18 +111,20 @@ class GutendexApiService {
       final uri = Uri.parse('${ApiConstants.baseUrl}/books/$bookId');
 
       print('📖 Gutendex Book Detail: $uri');
-      
-      final response = await _client.get(uri).timeout(
-        Duration(seconds: ApiConstants.connectTimeout),
-      );
 
-      print('📖 Response status: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('API error: ${response.statusCode}');
-      }
+      return await _retryWithDelay(() async {
+        final response = await _client.get(uri).timeout(
+          Duration(seconds: ApiConstants.connectTimeout),
+        );
+
+        print('📖 Response status: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          return json.decode(response.body);
+        } else {
+          throw Exception('API error: ${response.statusCode}');
+        }
+      }, operationName: 'Gutendex Book Detail');
     } catch (e) {
       print('❌ Gutendex book detail error: $e');
       rethrow;
@@ -92,7 +132,7 @@ class GutendexApiService {
   }
 
   /// Download full text content dari Project Gutenberg
-  /// 
+  ///
   /// Parameters:
   /// - formats: Map dari format URLs (dari book detail)
   /// - preferredFormat: Format yang diprioritaskan (default: text/plain)
@@ -100,13 +140,13 @@ class GutendexApiService {
     try {
       // Cari URL untuk text/plain terlebih dahulu
       String? contentUrl;
-      
+
       // Priority 1: text/plain
       final plainTextKey = formats.keys.firstWhere(
         (key) => key.startsWith('text/plain'),
         orElse: () => '',
       );
-      
+
       if (plainTextKey.isNotEmpty) {
         contentUrl = formats[plainTextKey];
       } else {
@@ -115,7 +155,7 @@ class GutendexApiService {
           (key) => key.startsWith('text/html'),
           orElse: () => '',
         );
-        
+
         if (htmlKey.isNotEmpty) {
           contentUrl = formats[htmlKey];
         }
@@ -127,21 +167,23 @@ class GutendexApiService {
       }
 
       print('📥 Downloading content from: $contentUrl');
-      
-      final response = await _client.get(Uri.parse(contentUrl)).timeout(
-        Duration(seconds: ApiConstants.receiveTimeout),
-      );
 
-      if (response.statusCode == 200) {
-        // Jika HTML, extract text content
-        if (contentUrl.contains('.htm')) {
-          return _extractTextFromHtml(response.body);
+      return await _retryWithDelay(() async {
+        final response = await _client.get(Uri.parse(contentUrl!)).timeout(
+          Duration(seconds: ApiConstants.receiveTimeout),
+        );
+
+        if (response.statusCode == 200) {
+          // Jika HTML, extract text content
+          if (contentUrl!.contains('.htm')) {
+            return _extractTextFromHtml(response.body);
+          }
+          return response.body;
+        } else {
+          print('❌ Failed to download content: ${response.statusCode}');
+          throw Exception('Download failed: ${response.statusCode}');
         }
-        return response.body;
-      } else {
-        print('❌ Failed to download content: ${response.statusCode}');
-        return null;
-      }
+      }, operationName: 'Content Download');
     } catch (e) {
       print('❌ Content download error: $e');
       return null;
@@ -177,16 +219,18 @@ class GutendexApiService {
       });
 
       print('📚 Gutendex Popular Books: $uri');
-      
-      final response = await _client.get(uri).timeout(
-        Duration(seconds: ApiConstants.connectTimeout),
-      );
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('API error: ${response.statusCode}');
-      }
+      return await _retryWithDelay(() async {
+        final response = await _client.get(uri).timeout(
+          Duration(seconds: ApiConstants.connectTimeout),
+        );
+
+        if (response.statusCode == 200) {
+          return json.decode(response.body);
+        } else {
+          throw Exception('API error: ${response.statusCode}');
+        }
+      }, operationName: 'Gutendex Popular Books');
     } catch (e) {
       print('❌ Gutendex popular books error: $e');
       rethrow;
@@ -204,16 +248,18 @@ class GutendexApiService {
       });
 
       print('📚 Gutendex Topic [$topic]: $uri');
-      
-      final response = await _client.get(uri).timeout(
-        Duration(seconds: ApiConstants.connectTimeout),
-      );
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('API error: ${response.statusCode}');
-      }
+      return await _retryWithDelay(() async {
+        final response = await _client.get(uri).timeout(
+          Duration(seconds: ApiConstants.connectTimeout),
+        );
+
+        if (response.statusCode == 200) {
+          return json.decode(response.body);
+        } else {
+          throw Exception('API error: ${response.statusCode}');
+        }
+      }, operationName: 'Gutendex Topic');
     } catch (e) {
       print('❌ Gutendex topic error: $e');
       rethrow;

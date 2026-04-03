@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../models/novel.dart';
 import '../models/category.dart' as app_models;
 import '../models/chapter.dart' as app_models;
@@ -52,9 +54,12 @@ class NovelService {
       }
 
       return [];
+    } on TimeoutException catch (e) {
+      print('❌ Timeout getting novels: $e');
+      throw Exception('Connection timeout. Please check your internet connection.');
     } catch (e) {
       print('❌ Error getting novels: $e');
-      return [];
+      throw Exception('Failed to load novels: ${e.toString()}');
     }
   }
 
@@ -92,9 +97,12 @@ class NovelService {
       }
 
       return [];
+    } on TimeoutException catch (e) {
+      print('❌ Timeout searching novels: $e');
+      throw Exception('Connection timeout. Please check your internet connection.');
     } catch (e) {
       print('❌ Error searching novels: $e');
-      return [];
+      throw Exception('Failed to search novels: ${e.toString()}');
     }
   }
 

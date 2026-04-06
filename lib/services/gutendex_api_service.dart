@@ -245,18 +245,26 @@ class GutendexApiService {
         'topic': topic,
         'languages': 'en',
         'copyright': 'false',
+        'limit': limit.toString(),
       });
 
       print('📚 Gutendex Topic [$topic]: $uri');
+      print('🔍 Topic parameter value: "$topic"');
 
       return await _retryWithDelay(() async {
         final response = await _client.get(uri).timeout(
           Duration(seconds: ApiConstants.connectTimeout),
         );
 
+        print('📡 API Response status: ${response.statusCode}');
+
         if (response.statusCode == 200) {
-          return json.decode(response.body);
+          final data = json.decode(response.body);
+          final results = data['results'] as List? ?? [];
+          print('✅ Got ${results.length} books for topic: $topic');
+          return data;
         } else {
+          print('❌ API error: ${response.statusCode} - ${response.body}');
           throw Exception('API error: ${response.statusCode}');
         }
       }, operationName: 'Gutendex Topic');

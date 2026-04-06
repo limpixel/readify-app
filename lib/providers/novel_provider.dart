@@ -42,6 +42,9 @@ class NovelProvider extends NovelProviderBase {
   // Load novels dari Gutendex (Project Gutenberg)
   @override
   Future<void> loadNovels({String? category}) async {
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🔄 loadNovels called with category: ${category ?? "null"}');
+    
     _state = LoadState.loading;
     _error = '';
     notifyListeners();
@@ -52,14 +55,28 @@ class NovelProvider extends NovelProviderBase {
 
       if (category != null && category.isNotEmpty && category != 'All' && category != 'all') {
         // Fetch by category/bookshelf
+        print('📡 Calling getAllNovels with category: $category');
         final loadedNovels = await _novelService.getAllNovels(category: category, limit: 40);
         _novels = loadedNovels;
         print('📖 Loaded ${_novels.length} novels for category: $category');
+        
+        // Print first 3 novel titles to verify different data
+        if (_novels.isNotEmpty) {
+          final titlesToShow = _novels.take(3).map((n) => n.title).join(', ');
+          print('📚 First 3 novels: $titlesToShow');
+        }
       } else {
         // Fetch popular books
+        print('📡 Calling getAllNovels (popular books)');
         final loadedNovels = await _novelService.getAllNovels(limit: 40);
         _novels = loadedNovels;
         print('📖 Loaded ${_novels.length} popular novels');
+        
+        // Print first 3 novel titles
+        if (_novels.isNotEmpty) {
+          final titlesToShow = _novels.take(3).map((n) => n.title).join(', ');
+          print('📚 First 3 novels: $titlesToShow');
+        }
       }
 
       // Update categories dengan extract dari novels yang sudah di-load
@@ -72,6 +89,7 @@ class NovelProvider extends NovelProviderBase {
       }
 
       print('✅ Loaded ${_novels.length} novels from Gutendex');
+      print('📊 Current state: novels=${_novels.length}, categories=${_categories.length}');
       _state = LoadState.loaded;
     } catch (e) {
       print('❌ Error loading novels: $e');
@@ -79,7 +97,9 @@ class NovelProvider extends NovelProviderBase {
       _error = e.toString();
     }
 
+    print('🔔 Calling notifyListeners...');
     notifyListeners();
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   // Load novel by ID + fetch full content

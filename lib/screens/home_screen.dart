@@ -39,6 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _onCategorySelected(String categoryName) async {
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('📂 Category selected: $categoryName');
+    
     setState(() {
       _selectedCategory = categoryName;
     });
@@ -46,12 +49,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final novelProvider = context.read<NovelProviderBase>();
     
     if (categoryName == 'All' || categoryName == 'all') {
-      print('📚 Loading all novels');
+      print('📚 Loading all novels (no filter)');
       await novelProvider.loadNovels();
     } else {
       print('📂 Loading novels for category: $categoryName');
       await novelProvider.loadNovels(category: categoryName);
     }
+    
+    print('📊 After load - Novels count: ${novelProvider.novels.length}');
+    print('📊 After load - Categories count: ${novelProvider.categories.length}');
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   void _onItemTapped(int index) {

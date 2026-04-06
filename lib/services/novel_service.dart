@@ -17,7 +17,9 @@ class NovelService {
   /// Get semua novel dari Gutendex (popular books)
   Future<List<Novel>> getAllNovels({String? category, int limit = 20}) async {
     try {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       print('📚 Fetching novels from Gutendex...');
+      print('📂 Category parameter: ${category ?? "null"}');
 
       Map<String, dynamic> response;
 
@@ -30,13 +32,17 @@ class NovelService {
           topic,
           limit: limit,
         );
+        
+        print('📡 Response received');
+        print('📡 Response has results: ${response.containsKey('results')}');
       } else {
         // Fetch popular books
+        print('📚 Fetching popular books (no category filter)');
         response = await _gutendexApi.getPopularBooks(limit: limit);
+        print('📡 Response received');
+        print('📡 Response has results: ${response.containsKey('results')}');
       }
 
-      print('📡 API Response keys: ${response.keys.toList()}');
-      
       if (response['results'] != null) {
         final books = response['results'] as List;
         print('✅ Found ${books.length} books in response');
@@ -46,10 +52,14 @@ class NovelService {
           try {
             if (book is Map<String, dynamic>) {
               print('📖 Parsing book: ${book['title'] ?? 'Unknown'}');
+              print('📖 Book bookshelves: ${book['bookshelves']}');
+              print('📖 Book subjects: ${book['subjects']}');
+              
               final novel = Novel.fromJson(book);
               if (novel.id.isNotEmpty && novel.title.isNotEmpty) {
                 novels.add(novel);
-                print('  ✅ Added novel: ${novel.title} (category: ${novel.category})');
+                print('  ✅ Added novel: ${novel.title}');
+                print('  ✅ Novel category: ${novel.category}');
               } else {
                 print('  ⚠️ Skipped novel (empty id or title)');
               }
@@ -61,9 +71,11 @@ class NovelService {
         }
 
         print('✅ Successfully parsed ${novels.length} novels');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return novels;
       } else {
         print('⚠️ No results in response');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return [];
       }
     } on TimeoutException catch (e) {
@@ -71,6 +83,7 @@ class NovelService {
       throw Exception('Connection timeout. Please check your internet connection.');
     } catch (e) {
       print('❌ Error getting novels: $e');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       throw Exception('Failed to load novels: ${e.toString()}');
     }
   }
@@ -215,37 +228,52 @@ class NovelService {
   }
 
   /// Map nama kategori UI ke Gutendex bookshelf/topic
-  /// Gutendex menggunakan parameter 'topic' yang map ke bookshelves
+  /// Gutendex menggunakan parameter 'topic' yang melakukan substring match pada bookshelves dan subjects
+  /// List bookshelves: https://www.gutenberg.org/ebooks/bookshelf/
   String _mapCategoryToTopic(String category) {
-    // Map kategori ke bookshelf name yang valid di Gutendex
-    // List bookshelves: https://www.gutenberg.org/ebooks/bookshelf/
+    // Map kategori UI ke keyword yang akan di-match oleh Gutendex API
+    // Gutendex melakukan case-insensitive substring match pada bookshelves dan subjects
     final Map<String, String> categoryToTopic = {
       'All': '',
-      'Fiction': 'Fiction',
-      'Children': 'Children',
-      'Adventure': 'Adventure',
-      'Detective': 'Detective fiction',
-      'Science Fiction': 'Science fiction',
-      'Fantasy': 'Fantasy fiction',
-      'Romance': 'Romance',
-      'Horror': 'Horror tales',
-      'Historical': 'Historical fiction',
-      'Literature': 'Literature',
-      'Drama': 'Drama',
-      'Tragedies': 'Tragedies',
-      'Poetry': 'Poetry',
-      'Biography': 'Biography',
-      'History': 'History',
-      'Science': 'Science',
-      'Philosophy': 'Philosophy',
-      'Religion': 'Religion',
-      'Art': 'Art',
-      'Music': 'Music',
-      'Travel': 'Travel',
-      'Nature': 'Nature',
+      'Fiction': 'fiction',
+      'Children': "children's literature",
+      'Adventure': 'adventure',
+      'Detective': 'detective',
+      'Science Fiction': 'science fiction',
+      'Fantasy': 'fantasy',
+      'Romance': 'romance',
+      'Horror': 'horror',
+      'Historical': 'historical fiction',
+      'Literature': 'literature',
+      'Drama': 'drama',
+      'Poetry': 'poetry',
+      'Biography': 'biography',
+      'History': 'history',
+      'Science': 'science',
+      'Philosophy': 'philosophy',
+      'Religion': 'religion',
+      'Art': 'art',
+      'Music': 'music',
+      'Travel': 'travel',
+      'Nature': 'nature',
+      'War': 'war',
+      'Love': 'love',
+      'Mystery': 'mystery',
+      'Crime': 'crime',
+      'Short Stories': 'short stories',
+      'Classics': 'classics',
     };
 
-    return categoryToTopic[category] ?? category.toLowerCase().replaceAll(' ', '_');
+    final topic = categoryToTopic[category];
+    if (topic != null && topic.isNotEmpty) {
+      print('📂 Mapped category "$category" -> topic "$topic"');
+      return topic;
+    }
+    
+    // Fallback: gunakan category name langsung (lowercase untuk substring match)
+    final fallback = category.toLowerCase();
+    print('📂 No mapping found, using fallback: "$fallback"');
+    return fallback;
   }
 
   /// Get semua categories (bookshelves dari Project Gutenberg)
@@ -260,6 +288,7 @@ class NovelService {
   }
 
   /// Extract unique categories from a list of novels
+  /// Categories di-extract dari bookshelves dan subjects novels
   List<app_models.Category> extractCategoriesFromNovels(List<Novel> novels) {
     final Map<String, int> categoryCounts = {};
     final Map<String, String> categoryIcons = {
@@ -275,10 +304,9 @@ class NovelService {
       'Historical': '📜',
       'Literature': '📚',
       'Drama': '🎭',
-      'Tragedies': '🎭',
       'Poetry': '📝',
       'Biography': '👤',
-      'History': '📜',
+      'History': '🏛️',
       'Science': '🔬',
       'Philosophy': '💭',
       'Religion': '⛪',
@@ -286,6 +314,12 @@ class NovelService {
       'Music': '🎵',
       'Travel': '✈️',
       'Nature': '🌿',
+      'War': '⚔️',
+      'Love': '❤️',
+      'Mystery': '❓',
+      'Crime': '🔪',
+      'Short Stories': '📄',
+      'Classics': '🏆',
     };
 
     // Count novels per category
@@ -293,6 +327,8 @@ class NovelService {
       final category = novel.category;
       categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
     }
+
+    print('📊 Category counts before filtering: $categoryCounts');
 
     // Build category list
     final categories = <app_models.Category>[];
@@ -315,8 +351,9 @@ class NovelService {
       final categoryName = entry.key;
       final count = entry.value;
       
-      // Skip if count is 0
+      // Skip if count is 0 or category is too generic
       if (count == 0) continue;
+      if (categoryName.isEmpty || categoryName == 'Unknown') continue;
 
       // Get icon or use default
       final icon = categoryIcons[categoryName] ?? '📚';
@@ -331,6 +368,7 @@ class NovelService {
       ));
     }
 
+    print('✅ Extracted ${categories.length} categories from novels');
     return categories;
   }
 

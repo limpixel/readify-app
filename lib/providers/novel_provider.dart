@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show ChangeNotifier;
 import '../models/novel.dart';
 import '../models/category.dart' as app_models;
 import '../models/chapter.dart' as app_models;
@@ -49,15 +48,27 @@ class NovelProvider extends NovelProviderBase {
 
     try {
       print('📚 Loading novels from Gutendex (Project Gutenberg)...');
+      print('📂 Category filter: ${category ?? "none (popular books)"}');
 
       if (category != null && category.isNotEmpty && category != 'All' && category != 'all') {
         // Fetch by category/bookshelf
         final loadedNovels = await _novelService.getAllNovels(category: category, limit: 40);
         _novels = loadedNovels;
+        print('📖 Loaded ${_novels.length} novels for category: $category');
       } else {
         // Fetch popular books
         final loadedNovels = await _novelService.getAllNovels(limit: 40);
         _novels = loadedNovels;
+        print('📖 Loaded ${_novels.length} popular novels');
+      }
+
+      // Update categories dengan extract dari novels yang sudah di-load
+      if (_novels.isNotEmpty) {
+        _categories = _novelService.extractCategoriesFromNovels(_novels);
+        print('📂 Extracted ${_categories.length} categories from novels');
+      } else {
+        print('⚠️ No novels loaded, using default categories');
+        _categories = await _novelService.getAllCategories();
       }
 
       print('✅ Loaded ${_novels.length} novels from Gutendex');
@@ -141,9 +152,15 @@ class NovelProvider extends NovelProviderBase {
 
     try {
       print('📚 Loading categories...');
-      
-      final loadedCategories = await _novelService.getAllCategories();
-      _categories = loadedCategories;
+
+      // If we already have novels, extract categories from them
+      if (_novels.isNotEmpty) {
+        _categories = _novelService.extractCategoriesFromNovels(_novels);
+      } else {
+        // Otherwise, get default categories
+        final loadedCategories = await _novelService.getAllCategories();
+        _categories = loadedCategories;
+      }
 
       print('✅ Loaded ${_categories.length} categories');
       _state = LoadState.loaded;
@@ -155,6 +172,7 @@ class NovelProvider extends NovelProviderBase {
 
     notifyListeners();
   }
+
 
   // Get novels by category
   @override

@@ -29,9 +29,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     final novelProvider = context.read<NovelProviderBase>();
+    // Reset category filter ke 'All' saat reload
+    setState(() {
+      _selectedCategory = 'All';
+    });
     await novelProvider.loadNovels();
-    await novelProvider.loadCategories();
+    // Categories akan di-extract otomatis setelah novels di-load
     await context.read<FavoriteProviderBase>().loadFavorites();
+  }
+
+  Future<void> _onCategorySelected(String categoryName) async {
+    setState(() {
+      _selectedCategory = categoryName;
+    });
+    
+    final novelProvider = context.read<NovelProviderBase>();
+    
+    if (categoryName == 'All' || categoryName == 'all') {
+      print('📚 Loading all novels');
+      await novelProvider.loadNovels();
+    } else {
+      print('📂 Loading novels for category: $categoryName');
+      await novelProvider.loadNovels(category: categoryName);
+    }
   }
 
   void _onItemTapped(int index) {
@@ -144,53 +164,115 @@ class _HomeScreenState extends State<HomeScreen> {
           return const SizedBox.shrink();
         }
 
-        return SizedBox(
-          height: 50,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            children: [
-              // All Category
-              CategoryChip(
-                category: app_models.Category(
-                  id: 'all',
-                  name: 'All',
-                  description: 'All novels',
-                  icon: '📚',
-                  novelCount: 0,
-                  createdAt: DateTime.now(),
-                ),
-                isSelected: _selectedCategory == 'All',
-                onTap: () {
-                  setState(() {
-                    _selectedCategory = 'All';
-                  });
-                  context.read<NovelProvider>().loadNovels();
-                },
+        return Container(
+          height: 60,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
-              const SizedBox(width: 8),
-              // Category List
-              ...novelProvider.categories.map((category) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: CategoryChip(
-                    category: category,
-                    isSelected: _selectedCategory == category.name,
-                    onTap: () {
-                      setState(() {
-                        _selectedCategory = category.name;
-                      });
-                      context
-                          .read<NovelProvider>()
-                          .getNovelsByCategory(category.name);
-                    },
-                  ),
-                );
-              }),
             ],
+          ),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            itemCount: novelProvider.categories.length,
+            itemBuilder: (context, index) {
+              final category = novelProvider.categories[index];
+              final isSelected = _selectedCategory == category.name;
+              
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _buildCategoryChip(
+                  category: category,
+                  isSelected: isSelected,
+                  onTap: () => _onCategorySelected(category.name),
+                ),
+              );
+            },
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCategoryChip({
+    required app_models.Category category,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.withOpacity(0.3),
+            width: 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              category.icon,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              category.name,
+              style: TextStyle(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.onPrimary
+                    : Theme.of(context).colorScheme.onSurface,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+            if (category.novelCount > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.2)
+                      : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${category.novelCount}',
+                  style: TextStyle(
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).colorScheme.primary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

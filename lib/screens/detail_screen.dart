@@ -30,7 +30,9 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _loadChapters() async {
     if (_hasLoadedChapters) return;
-    
+
+    if (!mounted) return;
+
     setState(() {
       _isLoadingChapters = true;
     });
@@ -39,20 +41,24 @@ class _DetailScreenState extends State<DetailScreen> {
       final novelProvider = context.read<NovelProviderBase>();
       // Get novel service dari provider
       await Future.delayed(const Duration(milliseconds: 100));
-      
+
       // Fetch chapters dari novel service
       final chapters = await novelProvider.getChapters(
         widget.novel.id,
         title: widget.novel.title,
         author: widget.novel.author,
       );
-      
+
+      if (!mounted) return;
+
       setState(() {
         _chapters = chapters;
         _isLoadingChapters = false;
         _hasLoadedChapters = true;
       });
     } catch (e) {
+      if (!mounted) return;
+      
       setState(() {
         _isLoadingChapters = false;
         _hasLoadedChapters = true;
